@@ -12,6 +12,8 @@ param logAnalyticsWorkspaceId string
 @description('PagerDuty "Microsoft Azure" integration URL. Leave empty to skip the PD receiver.')
 @secure()
 param pagerDutyWebhookUrl string = ''
+@description('Application Gateway resource id (scope of the edge response-status alert). Leave empty to skip it.')
+param appGwId string = ''
 
 var hasPagerDuty = !empty(pagerDutyWebhookUrl)
 
@@ -149,6 +151,47 @@ resource gradeExportsFailing 'Microsoft.Insights/scheduledQueryRules@2023-03-15-
     // so this rule stays as Azure Monitor portal evidence only — otherwise PagerDuty would also
     // receive the raw common-alert-schema payload and show a second, unreadable incident.
     actions: {}
+  }
+}
+
+// Edge response-status alert, codified so it can no longer drift out-of-band.
+// Scoped to 5xx ONLY: the public listener is continuously hit by internet scanners probing
+// for secrets/config files (/.env, /docker-compose.yml, ...). Those requests correctly get 404
+// from learner-portal, so counting 4xx made this dynamic-threshold rule fire 200+ times in
+// two weeks with zero student impact. Same name as the previously portal-created rule so a
+// deploy replaces it in place. Not wired to PagerDuty (unchanged routing); see alerts above.
+resource appGwResponseStatus 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!empty(appGwId)) {
+  name: 'agw-zava-${resourceToken}-agResponseStatus'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Elevated rate of server-error responses at the public entry point.'
+    severity: 2
+    enabled: true
+    scopes: [ appGwId ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    targetResourceType: 'Microsoft.Network/applicationGateways'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.MultipleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'DynamicThresholdCriterion'
+          name: 'ResponseStatus5xx'
+          metricNamespace: 'Microsoft.Network/applicationgateways'
+          metricName: 'ResponseStatus'
+          dimensions: [
+            { name: 'HttpStatusGroup', operator: 'Include', values: [ '5xx' ] }
+          ]
+          operator: 'GreaterThan'
+          alertSensitivity: 'Medium'
+          failingPeriods: { numberOfEvaluationPeriods: 2, minFailingPeriodsToAlert: 2 }
+          timeAggregation: 'Total'
+        }
+      ]
+    }
+    actions: []
   }
 }
 
