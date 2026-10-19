@@ -228,6 +228,7 @@ module alerts 'modules/alerts.bicep' = {
     tags: tags
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     pagerDutyWebhookUrl: pagerDutyWebhookUrl
+    appGwId: appgw.outputs.appGwId
   }
 }
 
