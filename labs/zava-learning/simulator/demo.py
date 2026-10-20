@@ -902,11 +902,8 @@ def monitor(cfg: dict, sc: dict, auto_fix: bool):
     manifest_grace_s = 300         # 5 min — comfortably past appgw/secret (~165s) manifestation
     broke_at = None                # pinned: the moment the outage began
     fixed_at = None                # pinned: the moment service recovered
-    # The demo is only "successful" once the SRE Agent has actually CLOSED the loop:
-    # PagerDuty resolved + agent run completed. When a live agent + PagerDuty are wired up
-    # (the real lab), service-health recovery alone is NOT success — we wait for the agent
-    # to resolve the incident. auto_fix is the dev stand-in (no live agent), so it falls back
-    # to service recovery as the success signal.
+    # PagerDuty-backed agent runs require incident closure. Native Azure Monitor runs
+    # prove service recovery without claiming the native investigation is complete.
     require_agent = bool(cfg.get("agent_name")) and bool(cfg["pagerduty"].get("api_token")) \
         and not auto_fix
     completed_at = None            # when the success criteria were first met (for the tail hold)
@@ -964,7 +961,7 @@ def monitor(cfg: dict, sc: dict, auto_fix: bool):
         steps.add_row(Text("3. SRE Agent engaged & diagnosing"),
                       status_word(agent_seen, tracked=bool(cfg.get("agent_name"))))
         steps.add_row(Text("4. Service recovered"), status_word(recovered, pending="not yet"))
-        steps.add_row(Text("5. SRE Agent resolved the incident"),
+        steps.add_row(Text("5. PagerDuty incident resolved"),
                       status_word(agent_resolved, tracked=require_agent, pending="closing out…"))
 
         outer = Table.grid(padding=(1, 0))
@@ -1068,7 +1065,7 @@ def monitor(cfg: dict, sc: dict, auto_fix: bool):
                             # (after freeing the disk) is our recovery signal.
                             fault_cleared = True
 
-            # Fallback agent-engaged signal when PagerDuty is not configured: look for the thread.
+            # Native Azure Monitor engagement is correlated to this alert's incident thread.
             if (alert_fired or pd_created) and not agent_seen and cfg.get("agent_name") \
                     and not cfg["pagerduty"].get("api_token") \
                     and (now - last_agent).total_seconds() >= 20:
@@ -1126,11 +1123,8 @@ def monitor(cfg: dict, sc: dict, auto_fix: bool):
                     fault_cleared = True
 
             live.update(build())
-            # Success = the SRE Agent CLOSED the loop (PagerDuty resolved + run complete).
-            # We keep monitoring past service-health recovery until the agent resolves the
-            # incident, so a lab that recovers the symptom but never gets the agent to close
-            # the incident does NOT get reported as successful. (Dev/no-agent runs fall back
-            # to service recovery.) Hold a few seconds after success for the graph tail.
+            # PagerDuty-backed runs wait for closure; other runs only prove recovery.
+            # Hold a few seconds after success for the graph tail.
             success = agent_resolved if require_agent else recovered
             if success:
                 if completed_at is None:
@@ -1151,11 +1145,14 @@ def _report(sc, alert_fired, pd_created, agent_seen, recovered, agent_resolved,
         ("PagerDuty incident raised", pd_created),
         ("SRE Agent engaged", agent_seen),
         ("Service recovered", recovered),
-        ("SRE Agent resolved the incident", agent_resolved),
+        ("PagerDuty incident resolved", agent_resolved if require_agent or agent_resolved else None),
     ]
     t = Table(title=f"{sc['emoji']} Scenario report — {sc['title']}", show_header=False)
     for label, done in lines:
-        t.add_row(label, "[green]yes[/]" if done else "[dim]no[/]")
+        status = "[dim]not tracked[/]" if done is None else (
+            "[green]yes[/]" if done else "[dim]no[/]"
+        )
+        t.add_row(label, status)
     console.print()
     console.print(t)
     if pd_incident:
@@ -1168,9 +1165,12 @@ def _report(sc, alert_fired, pd_created, agent_seen, recovered, agent_resolved,
     if success and require_agent:
         console.print("[bold green]✔ Demo successful — the SRE Agent diagnosed, remediated, and "
                       "resolved the incident (PagerDuty closed).[/]")
+    elif success and agent_seen and not pd_incident:
+        console.print("[green]✔ Service recovered with a live SRE Agent investigation. "
+                      "Native incident closure is not tracked by this simulator.[/]")
     elif success:
-        console.print("[green]✔ Service recovered (dev stand-in mode — no live SRE Agent / "
-                      "PagerDuty in this run).[/]")
+        console.print("[green]✔ Service recovered (full incident closure not verified "
+                      "in this run).[/]")
     elif require_agent and recovered and not agent_resolved:
         console.print("[yellow]⚠ Service recovered, but the SRE Agent has not resolved the "
                       "PagerDuty incident — NOT marking this demo successful. Check the agent "

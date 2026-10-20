@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from unittest.mock import Mock, patch
 
 import demo
@@ -86,6 +87,49 @@ class NativeMonitorTests(unittest.TestCase):
         self.assertTrue(result[4], "Recovery still requires an observed outage")
         self.assertTrue(result[7])
         self.assertTrue(result[9].endswith("/views/thread/native-thread"))
+
+
+class ReportTests(unittest.TestCase):
+    def report(self, **overrides):
+        arguments = {
+            "sc": demo.SCENARIOS["nsg"],
+            "alert_fired": True,
+            "pd_created": False,
+            "agent_seen": True,
+            "recovered": True,
+            "agent_resolved": False,
+            "require_agent": False,
+            "success": True,
+        }
+        arguments.update(overrides)
+        output = StringIO()
+        with patch.object(demo, "console", demo.Console(file=output, width=160, color_system=None)):
+            demo._report(**arguments)
+        return output.getvalue()
+
+    def test_native_recovery_is_not_reported_as_a_stand_in(self):
+        output = self.report(thread_url="https://agent.invalid/views/thread/native-thread")
+        self.assertIn("live SRE Agent investigation", output)
+        self.assertIn("Native incident closure is not tracked", output)
+        self.assertRegex(output, r"PagerDuty incident resolved[^\n]*not tracked")
+        self.assertNotIn("dev stand-in", output)
+        self.assertNotIn("PagerDuty closed", output)
+
+    def test_recovery_without_observed_agent_does_not_claim_one(self):
+        output = self.report(agent_seen=False)
+        self.assertIn("full incident closure not verified", output)
+        self.assertNotIn("live SRE Agent investigation", output)
+
+    def test_pagerduty_closure_still_reports_end_to_end_success(self):
+        output = self.report(pd_created=True, agent_resolved=True, require_agent=True)
+        self.assertIn("Demo successful", output)
+        self.assertIn("PagerDuty closed", output)
+        self.assertRegex(output, r"PagerDuty incident resolved[^\n]*yes")
+
+    def test_recovery_does_not_bypass_required_pagerduty_closure(self):
+        output = self.report(pd_created=True, require_agent=True, success=False)
+        self.assertIn("NOT marking this demo successful", output)
+        self.assertNotIn("Demo successful", output)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,8 @@
 A templatized, end-to-end lab that simulates a **online learning platform**
 ("Zava Learning") and lets the **Azure SRE Agent** autonomously diagnose and remediate planted
 faults — across the **network/edge** and the **application** tiers — while integrating with
-**PagerDuty** (incident platform), **ServiceNow** (change management), and **GitHub** (code-fix PRs).
+**Azure Monitor or PagerDuty** (incident platform), **ServiceNow** (change management), and
+**GitHub** (code-fix PRs).
 
 > The platform deploys healthy. Faults are injected on demand by the chaos scripts / demo simulator,
 > so the SRE Agent has a real, observable problem to investigate.
@@ -24,7 +25,7 @@ faults — across the **network/edge** and the **application** tiers — while i
 | ACR `acrzava*` | Service images |
 | Managed identity `id-zava-*` | ACR pull + (reused by the SRE Agent) |
 | Log Analytics + App Insights | Telemetry the agent reasons over |
-| Action group + symptom-only alerts | `Zava-quiz-launch-failing`, `Zava-portal-5xx-elevated`; webhook → PagerDuty |
+| Symptom-only alerts + optional action group | Log alerts `Zava-quiz-launch-failing`, `Zava-portal-5xx-elevated`; backend-health metric alert `Zava-quiz-endpoint-unavailable`; native Azure Monitor or optional PagerDuty notification |
 
 **Not** deployed by the main template: the **SRE Agent** itself — provisioned separately (see below).
 
@@ -178,8 +179,8 @@ python ./simulator/demo.py --scenario nsg --auto-fix   # dry run without a live 
 
 The simulator narrates the business context, injects the fault, then live-monitors the platform's
 health while polling for the **Azure Monitor alert**, the **PagerDuty incident**, and the **SRE Agent**
-response — and reports recovery. PagerDuty / agent polling turns on when `agent_name` and
-`pagerduty.api_token` are available: set them in `simulator/config.json`, or leave them blank and
+response — and reports recovery. Agent correlation uses `agent_name`; PagerDuty polling additionally
+requires `pagerduty.api_token`: set them in `simulator/config.json`, or leave them blank and
 the simulator falls back to env vars — `agent_name`←`ZAVA_AGENT`, and the PagerDuty token/service id
 are auto-loaded from the gitignored `sre-config/.env` (`PAGERDUTY_API_TOKEN` / `PAGERDUTY_SERVICE_ID`),
 so the secret can stay out of `config.json`.
@@ -189,6 +190,9 @@ For **Azure Monitor-only** deployments, the NSG scenario uses the symptom-only
 the gateway, so a network outage is detectable even when no request reaches the application logs.
 The enabled Azure Monitor response plan routes the alert to `zava-incident-responder`; PagerDuty
 credentials are not required. The simulator links the matching native investigation thread.
+It ends after an observed outage and verified service recovery; native alert resolution and the
+agent's remaining RCA/reporting work are not tracked as simulator completion gates. Follow the
+investigation link for those steps.
 With PagerDuty configured, the existing direct incident creation and lifecycle remain unchanged.
 
 Before running, complete post-provisioning so `quiz-nsg` runs the real `quiz-service` image and the
