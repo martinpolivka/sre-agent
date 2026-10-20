@@ -108,10 +108,14 @@ var allowAppGwToApps = {
     destinationPortRanges: [ '80', '443' ]
   }
 }
+// Guardrail: a cross-subnet DENY from the AppGW subnet must never outrank the
+// Allow-AppGw-To-Apps rule (priority 200). At priority 100 it shadowed the allow and
+// cut AppGW -> quiz-nsg on :8081 (Azure Monitor alert eeeb918f, 2026-10-20). Keep it
+// at a LOWER precedence (higher number) so it only blocks non-80/443 traffic.
 var legacyCrossSubnetDeny = {
   name: 'legacy-cross-subnet-deny'
   properties: {
-    priority: 100
+    priority: 4000
     direction: 'Inbound'
     access: 'Deny'
     protocol: '*'
