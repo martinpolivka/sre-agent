@@ -227,6 +227,7 @@ module alerts 'modules/alerts.bicep' = {
     resourceToken: resourceToken
     tags: tags
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    applicationGatewayId: appgw.outputs.appGwId
     pagerDutyWebhookUrl: pagerDutyWebhookUrl
   }
 }

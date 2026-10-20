@@ -103,8 +103,9 @@ the live mitigation (revision rollback/restart), the durable code fix is deliver
 by the `pr-delivery` skill and recorded as a Change Request by `servicenow-change-management`.
 
 ## Incident communication
-PagerDuty acknowledgement, status/summary notes, and resolution are owned by the
-`pagerduty-incident-update` skill.
+For PagerDuty incidents, acknowledgement, status/summary notes, and resolution are owned by the
+`pagerduty-incident-update` skill. For Azure Monitor alerts, record evidence and status in the
+native investigation and link the originating alert; do not require PagerDuty credentials.
 
 ## Verification
 Confirm `/api/quiz/*` returns 200 and the API success rate is back to baseline.

@@ -1,4 +1,4 @@
-// Symptom-only alert rules + PagerDuty action group.
+// Symptom-only alert rules + optional PagerDuty action group.
 // IMPORTANT: alert names/descriptions describe the OBSERVED SYMPTOM only and must
 // never reveal the root cause (NSG / LB / AppGW / app) — that is the SRE Agent's job.
 @description('Azure region for the alert rules (must be a real region, not global).')
@@ -9,6 +9,8 @@ param resourceToken string
 param tags object = {}
 @description('Log Analytics workspace resource id (alert scope).')
 param logAnalyticsWorkspaceId string
+@description('Application Gateway resource id for public quiz endpoint monitoring.')
+param applicationGatewayId string
 @description('PagerDuty "Microsoft Azure" integration URL. Leave empty to skip the PD receiver.')
 @secure()
 param pagerDutyWebhookUrl string = ''
@@ -58,6 +60,46 @@ resource quizLaunchFailing 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
     skipQueryValidation: true
     autoMitigate: false
     actions: { actionGroups: [ actionGroup.id ] }
+  }
+}
+
+resource quizEndpointUnavailable 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'Zava-quiz-endpoint-unavailable'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Students cannot launch quizzes through the public endpoint on port 8081.'
+    severity: 1
+    enabled: true
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT1M'
+    scopes: [ applicationGatewayId ]
+    targetResourceType: 'Microsoft.Network/applicationGateways'
+    targetResourceRegion: location
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'quizEndpointUnavailable'
+          criterionType: 'StaticThresholdCriterion'
+          metricNamespace: 'Microsoft.Network/applicationGateways'
+          metricName: 'UnhealthyHostCount'
+          timeAggregation: 'Average'
+          operator: 'GreaterThan'
+          threshold: 0
+          dimensions: [
+            {
+              name: 'BackendSettingsPool'
+              operator: 'Include'
+              values: [ 'quiz-nsg-pool~quiz-nsg-https' ]
+            }
+          ]
+        }
+      ]
+    }
+    // Native Azure Monitor response plans consume this alert. PagerDuty scenarios page directly.
+    actions: []
   }
 }
 

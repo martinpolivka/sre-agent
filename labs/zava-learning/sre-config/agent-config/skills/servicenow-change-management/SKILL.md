@@ -21,7 +21,7 @@ after a GitHub PR has been opened (by `pr-delivery`) for the durable fix.
 - An operator explicitly asks to open a Change Request or attach an RCA to an existing record.
 
 Do not raise a Change Request for live mitigations alone (deleting an NSG rule, restarting/rolling
-back a revision) — those are tracked as PagerDuty incident notes. The Change Request tracks the
+back a revision) — those are tracked in the native investigation or PagerDuty incident notes. The Change Request tracks the
 **durable** code/IaC fix.
 
 ## Steps
@@ -39,7 +39,8 @@ back a revision) — those are tracked as PagerDuty incident notes. The Change R
    - `table_sys_id`: the Change Request `sys_id` from step 1.
    - `file_name`: e.g. `rca-<symptom>.md`.
    - `content`: the full RCA report (timeline, root cause, fix, verification).
-3. Reference the Change Request number back in the PagerDuty incident notes and the GitHub PR.
+3. Reference the Change Request in the originating investigation and GitHub PR, and in PagerDuty
+   incident notes when the trigger is from PagerDuty.
 
 ## Notes
 - Apply the `zava-redaction` standard to the `description`, `implementation_plan`, and the attached
@@ -48,4 +49,4 @@ back a revision) — those are tracked as PagerDuty incident notes. The Change R
 - Credentials (`SERVICENOW_URL/USER/PASS`) are injected from the agent environment (Key Vault-backed);
   never request or hardcode them.
 - If ServiceNow credentials are not configured, the tools return `success: false` — report that the
-  Change Request could not be created and continue the incident lifecycle in PagerDuty.
+  Change Request could not be created and continue in the originating incident platform.

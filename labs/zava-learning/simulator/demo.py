@@ -106,7 +106,7 @@ SCENARIOS = {
             "That rule silently blocks the web gateway from reaching the quiz services.",
             "Start a synthetic 'student' check that notices the outage and pages on-call.",
         ],
-        "symptom_alert": "Zava-quiz-launch-failing",
+        "symptom_alert": "Zava-quiz-endpoint-unavailable",
         "probe_path": "/quiz/BIO-101",
         "agent": "connectivity-triage-agent",
         "pd_title": "Zava quiz launches failing — students cannot start quizzes",
@@ -471,14 +471,6 @@ def get_pagerduty_incident(pd: dict, incident_id: str):
     except requests.RequestException:
         pass
     return None
-
-
-def poll_agent_thread(keyword: str, since: datetime) -> bool:
-    """True if the SRE Agent has a recent thread matching keyword (best effort)."""
-    out = _az("srectl thread list --quiet")
-    if not out:
-        return False
-    return keyword.lower() in out.lower()
 
 
 # ── SRE Agent thread deep-linking ───────────────────────────────────
@@ -1022,8 +1014,8 @@ def monitor(cfg: dict, sc: dict, auto_fix: bool):
                 if broke_at is None:
                     broke_at = now     # pin the moment the outage began
 
-            # Detection signal #1: Azure Monitor alert (fires for the app/perf scenarios,
-            # which emit real logs). For nsg/appgw the blackhole is invisible to Azure Monitor.
+            # Azure Monitor also observes the NSG lane through gateway backend health;
+            # blocked requests cannot emit application logs.
             if not alert_fired and (now - last_alert).total_seconds() >= 15:
                 last_alert = now
                 if poll_azmon_alert(sub, sc["symptom_alert"], sim_start):
@@ -1081,16 +1073,15 @@ def monitor(cfg: dict, sc: dict, auto_fix: bool):
                     and not cfg["pagerduty"].get("api_token") \
                     and (now - last_agent).total_seconds() >= 20:
                 last_agent = now
-                if poll_agent_thread(sc["agent"], sim_start):
+                tid = resolve_incident_thread(cfg, sim_start,
+                                              expected_title=sc["symptom_alert"])
+                if tid:
                     agent_seen = True
                     timeline.add("SRE Agent picked up the incident and is investigating.", "green")
                     if thread_url is None:
-                        tid = resolve_incident_thread(cfg, sim_start,
-                                                      expected_title=sc.get("pd_title"))
-                        if tid:
-                            thread_url = agent_thread_url(cfg, tid)
-                            timeline.add("🔗 View the SRE Agent's investigation", "cyan",
-                                         link=thread_url)
+                        thread_url = agent_thread_url(cfg, tid)
+                        timeline.add("🔗 View the SRE Agent's investigation", "cyan",
+                                     link=thread_url)
 
             # Recovery is proven by the student journey itself: the public endpoint must be healthy
             # for several consecutive checks, AND we must have actually OBSERVED the fault hit

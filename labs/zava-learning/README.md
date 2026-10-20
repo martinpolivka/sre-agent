@@ -184,6 +184,17 @@ the simulator falls back to env vars — `agent_name`←`ZAVA_AGENT`, and the Pa
 are auto-loaded from the gitignored `sre-config/.env` (`PAGERDUTY_API_TOKEN` / `PAGERDUTY_SERVICE_ID`),
 so the secret can stay out of `config.json`.
 
+For **Azure Monitor-only** deployments, the NSG scenario uses the symptom-only
+`Zava-quiz-endpoint-unavailable` metric alert. It observes the isolated quiz backend's health at
+the gateway, so a network outage is detectable even when no request reaches the application logs.
+The enabled Azure Monitor response plan routes the alert to `zava-incident-responder`; PagerDuty
+credentials are not required. The simulator links the matching native investigation thread.
+With PagerDuty configured, the existing direct incident creation and lifecycle remain unchanged.
+
+Before running, complete post-provisioning so `quiz-nsg` runs the real `quiz-service` image and the
+database schema is seeded. PostgreSQL must be running; a stopped database or a placeholder image
+is an existing outage, not a valid healthy starting point for the NSG demo.
+
 ### Scenarios
 
 | Key | Symptom (student-facing) | Injected fault | Built-in skills exercised |

@@ -51,6 +51,9 @@ with the RCA attached. Post-incident, the reporting skills (`rca-analysis`,
 deliverables. The custom agent selects and sequences whichever skills the situation needs — skills
 declare their scope; they do not call each other. Incident lifecycle (ack/notes/resolve) happens in
 **PagerDuty**.
+When deployed with the optional PagerDuty integration omitted, native **Azure Monitor** alerts
+use the native investigation and alert lifecycle instead. Never gate native triage or mitigation
+on PagerDuty acknowledgement, credentials, or closure tools.
 
 ## Adding a new scenario
 

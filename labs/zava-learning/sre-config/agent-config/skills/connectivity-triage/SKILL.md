@@ -21,6 +21,8 @@ internal ingress) -> course-api / assessment-api (environment-internal). App Ins
 
 Diagnose root cause from telemetry and configuration, then remediate within the boundary below.
 Do NOT guess the cause from the alert name — the alert is symptom-only by design.
+For a parallel quiz listener, map that listener's backend, environment, and subnet from live
+configuration instead of assuming it follows the portal's backend path.
 
 ## Trace the path, hop by hop
 1. **Application Gateway** — backend health (`az network application-gateway show-backend-health`),
@@ -53,10 +55,11 @@ on any hop. Filter App Insights/LAW queries by the relevant `cloud_RoleName`.
 - Always pass `--subscription` and prefer resource IDs to avoid ambiguity. Consult `GetAzCliHelp`
   before an unfamiliar write flag rather than guessing syntax.
 
-## Incident communication (PagerDuty)
-Record the request-path diagram and your diagnostic notes for the incident record. PagerDuty
+## Incident communication
+Record the request-path diagram and diagnostic notes in the originating investigation. For Azure
+Monitor alerts, use the native alert and thread; do not require PagerDuty credentials. PagerDuty
 acknowledgement, status/summary notes, and resolution are owned by the `pagerduty-incident-update`
-skill.
+skill only when the triggering incident is from PagerDuty.
 
 ## Code & change management
 - For an Infrastructure-as-Code root cause, the infra lives under `infra/` in `@@REPO@@`
@@ -68,5 +71,6 @@ skill.
 - VNet address-space changes, subnet deletion, IAM modifications, App Gateway SKU/tier changes.
 
 ## Verification
-Re-check the hop you changed, confirm the public endpoint returns 200 on `/` and `/api/quiz/*`, and
-confirm the alert auto-mitigated.
+Re-check the changed hop and the exact endpoint from the triggering alert (for example,
+`:8081/quiz/BIO-101` for an isolated quiz listener). A healthy portal on port 80 does not prove that
+listener recovered. Confirm the affected endpoint returns 200 and the alert auto-mitigated.

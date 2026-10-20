@@ -45,11 +45,11 @@ There is no native GitHub pull-request tool — author the branch, commit, and o
 3. Apply the minimal, surgical change. Match existing style. Touch only what the root cause
    requires.
 4. Commit with a conventional message: `fix(<area>): <symptom> — <root cause>` and a body that
-   summarizes the RCA and links the PagerDuty incident.
+   summarizes the RCA and links the originating PagerDuty incident or Azure Monitor alert.
 5. Open the PR against `@@REPO@@`. PR body must include: symptom, root cause, the change,
-   verification evidence (link the Before/After), and the PagerDuty incident number.
+   verification evidence (link the Before/After), and the originating incident or alert id.
 6. Capture the **PR URL** — the ServiceNow Change Request (`servicenow-change-management`)
-   references it. Post the PR link back in the PagerDuty incident notes.
+   references it. Post the PR link in the originating investigation (and PagerDuty notes when applicable).
 
 ## Out of scope (human approval required)
 - Merging the PR, force-pushes, history rewrites, changes outside the root-cause fix,

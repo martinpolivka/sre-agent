@@ -87,6 +87,7 @@ this shape:
 - **Durable-fix PR:** `[PR #<n>](<github-pr-url>)`
 - **ServiceNow CR:** `[<CR number>](<servicenow-cr-link>)` — use the clickable `link` returned by the CreateServiceNowChangeRequest tool
 - **PagerDuty incident:** `[Incident #<n>](<pagerduty-incident-url>)`
+- **Azure Monitor alert (for native incidents):** `[Open the originating alert](<azure-monitor-alert-url>)`
 - **Deck / charts (if produced):** `[Download the deck](<download-link>)`
 
 **Every bullet MUST be a clickable markdown hyperlink `[label](url)`** — never a bare URL, a naked
@@ -95,6 +96,8 @@ URLs come from those skills (the ServiceNow CR link is returned directly by its 
 (and deck) link is `/api/files/tmp/ThreadFiles/<threadId>/<file>` — correct once the file is verified
 on disk. If a real URL/link is not available for an artifact, omit that bullet rather than emitting a
 non-clickable placeholder.
+Use the originating incident platform: Azure Monitor investigations do not require a PagerDuty
+incident or credentials. Include the native alert link instead of inventing a PagerDuty reference.
 The HTML report download link is **mandatory** — never omit it. If the report file did not persist
 (its link 404s), re-write it into `tmp/ThreadFiles/<threadId>/` and confirm it is on disk, then include
 the `/api/files/...` link as a markdown hyperlink.
