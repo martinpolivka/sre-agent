@@ -12,7 +12,7 @@
     "assessmentMinReplicas": { "value": 1 },
     "assessmentMaxReplicas": { "value": 3 },
 
-    "injectLegacyDenyNsgLane": { "value": true },
+    "injectLegacyDenyNsgLane": { "value": false },
     "seedAuditFindings": { "value": true },
     "appgwLaneProbePath": { "value": "/health" },
     "appLaneMinReplicas": { "value": 1 },

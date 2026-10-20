@@ -105,7 +105,12 @@ var allowAppGwToApps = {
     sourceAddressPrefix: appGwSubnetPrefix
     sourcePortRange: '*'
     destinationAddressPrefix: '*'
-    destinationPortRanges: [ '80', '443' ]
+    // 80/443 hit the environment's internal load balancer; 31080/31443 are the ports the
+    // Container Apps edge proxy actually answers on behind that ILB. Allow them explicitly so
+    // AppGW -> ACA never depends on the implicit AllowVnetInBound (65000), which any custom
+    // DENY from the AppGW subnet (any priority <= 4096) would otherwise shadow.
+    // https://learn.microsoft.com/azure/container-apps/firewall-integration#nsg-allow-rules
+    destinationPortRanges: [ '80', '443', '31080', '31443' ]
   }
 }
 var legacyCrossSubnetDeny = {
