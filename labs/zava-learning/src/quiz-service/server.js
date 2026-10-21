@@ -15,21 +15,18 @@ if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
     .start();
   appInsights.defaultClient.context.tags[appInsights.defaultClient.context.keys.cloudRole] = "quiz-service";
 }
-// Zava Learning — quiz-service (DB-backed).
+// Zava Learning — quiz-service v1.1 ("tamper-evident quiz integrity receipts").
 //
-// This single, real codebase is the breakable surface for the DB-flavored fault lanes.
-// It owns NO fault toggles: every fault is injected via real backend state so the SRE
-// Agent sees an authentic failure mode.
-//   * query lane  -> /quiz runs a count over question_bank that depends on
-//                    idx_question_bank_course; break-query DROPs the index -> seq scan.
-//   * pool lane   -> connects with a dedicated DB role; break-pool sets a real
-//                    CONNECTION LIMIT on that role -> "too many connections" under load.
-//   * secret lane -> PGPASSWORD is sourced from Key Vault; break-secret rotates it to an
-//                    invalid value -> authentication failures.
-//   * perf lane   -> the v1.1 source variant adds a synchronous KDF on the hot path
-//                    (a real bad release shipped as quiz-service:v1.1).
+// THIS IS THE PLANTED BAD RELEASE (perf lane). It is a REAL, complete source variant —
+// not a runtime toggle. chaos/break-perf.ps1 copies this file over server.js, commits it
+// ("release: v1.1 quiz integrity receipts"), and builds quiz-service:v1.1. The only diff
+// from v1.0 is the synchronous KDF middleware below: it computes a per-request integrity
+// receipt on the quiz hot path with a deliberately expensive sync pbkdf2, spiking latency.
+// The SRE Agent diagnoses the regression, rolls the revision back live, and opens a real
+// git-revert PR; fix-perf/reset.ps1 reverts to v1.0 and redeploys the clean image.
 const express = require("express");
 const { Pool } = require("pg");
+const crypto = require("crypto");
 
 const app = express();
 app.use(express.json());
@@ -37,8 +34,6 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 const SERVICE = "quiz-service";
 
-// Per-request timing telemetry -> container console -> Log Analytics (ms= for latency
-// queries/alerts), matching the rest of the platform.
 app.use((req, res, next) => {
   const start = process.hrtime.bigint();
   res.on("finish", () => {
@@ -48,6 +43,19 @@ app.use((req, res, next) => {
   next();
 });
 // ZAVA-PERF-INJECT-POINT (the v1.1 "quiz integrity receipts" regression lives below this line)
+
+// >>> v1.1: tamper-evident quiz integrity receipts.
+// Stamp every quiz response with a cryptographic integrity receipt so downloaded quizzes
+// can be verified offline. Implemented as a SYNCHRONOUS KDF on the request path — which
+// blocks the event loop and turns a fast quiz load into a multi-hundred-ms request.
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.path.startsWith("/quiz/")) {
+    const payload = `${req.path}|${Date.now()}`;
+    res.set("x-quiz-integrity", crypto.pbkdf2Sync(payload, "zava-quiz-integrity", 1200000, 64, "sha512").toString("hex"));
+  }
+  next();
+});
+// <<< v1.1
 
 const pool = new Pool({
   host: process.env.PGHOST,
@@ -65,8 +73,6 @@ pool.on("error", (err) => {
   console.error(`pool error: ${err.message}`);
 });
 
-// Lightweight readiness ping. Surfaces secret/pool/connectivity faults as 503 so both the
-// AppGw probe and Azure Monitor see the lane as unhealthy.
 app.get("/health", async (_req, res) => {
   try {
     const c = await pool.connect();
@@ -82,8 +88,6 @@ app.get("/quiz/:courseId", async (req, res) => {
   let client;
   try {
     client = await pool.connect();
-    // Hot-path lookup over the large question bank. Index scan when healthy; the query
-    // lane fault DROPs idx_question_bank_course -> sequential scan over ~500k rows.
     const bank = await client.query(
       "SELECT count(*)::int AS available FROM question_bank WHERE course_id = $1 AND active",
       [courseId]
@@ -100,7 +104,6 @@ app.get("/quiz/:courseId", async (req, res) => {
         ];
     res.json({ courseId, available: bank.rows[0].available, questionCount: questions.length, questions });
   } catch (err) {
-    // DB unreachable / auth failure / role connection limit -> 500 (or 502-style upstream).
     res.status(500).json({ error: "quiz_lookup_failed", detail: String(err.message || err) });
   } finally {
     if (client) client.release();
