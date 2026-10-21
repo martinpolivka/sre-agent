@@ -58,6 +58,10 @@ const pool = new Pool({
   max: Number(process.env.PG_POOL_MAX || 10),
   connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 5000),
   idleTimeoutMillis: 30000,
+  // Fail fast on a dead DB peer (e.g. server stopped) instead of hanging an in-flight query
+  // until the kernel TCP retransmission timeout (~15 min) fires.
+  keepAlive: true,
+  query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS || 10000),
   ssl: (process.env.PG_SSL || "require") === "disable" ? false : { rejectUnauthorized: false }
 });
 
@@ -65,12 +69,23 @@ pool.on("error", (err) => {
   console.error(`pool error: ${err.message}`);
 });
 
+// pool "error" only covers IDLE clients: pg-pool detaches its idle listener while a client is
+// checked out. A socket error on an in-use client is then an unhandled 'error' event and
+// crashes the process (exit 1). Attach a listener for each client's whole lifetime.
+pool.on("connect", (client) => {
+  client.on("error", (err) => {
+    console.error(`client error: ${err.message}`);
+  });
+});
+
 // Lightweight readiness ping. Surfaces secret/pool/connectivity faults as 503 so both the
 // AppGw probe and Azure Monitor see the lane as unhealthy.
 app.get("/health", async (_req, res) => {
   try {
     const c = await pool.connect();
-    try { await c.query("SELECT 1"); } finally { c.release(); }
+    let qerr;
+    // release(err) evicts a broken connection instead of returning it to the pool.
+    try { await c.query("SELECT 1"); } catch (e) { qerr = e; throw e; } finally { c.release(qerr); }
     res.status(200).json({ status: "ok", service: SERVICE, ts: new Date().toISOString() });
   } catch (err) {
     res.status(503).json({ status: "degraded", service: SERVICE, detail: String(err.message || err) });
